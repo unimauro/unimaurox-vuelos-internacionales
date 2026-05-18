@@ -1,0 +1,58 @@
+name: fetch-opensky
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # cada 10 minutos
+  workflow_dispatch: {}      # permite trigger manual
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-opensky
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch OpenSky states
+        run: |
+          set -e
+          mkdir -p data
+          # Reintentos suaves por si rate-limit transitorio
+          for i in 1 2 3; do
+            if curl -sS --max-time 30 \
+                 -H "User-Agent: unimaurox-vuelos-internacionales (github.com/unimauro)" \
+                 -o data/states.json.new \
+                 "https://opensky-network.org/api/states/all"; then
+              # Validar JSON
+              if python3 -c "import json,sys; d=json.load(open('data/states.json.new')); assert 'states' in d and isinstance(d['states'], list), 'shape'; assert len(d['states'])>0, 'empty'; print(f'OK: {len(d[\"states\"])} states @ {d[\"time\"]}')"; then
+                mv data/states.json.new data/states.json
+                exit 0
+              fi
+            fi
+            echo "attempt $i failed, retrying..."
+            sleep 15
+          done
+          echo "::warning::fetch failed after 3 attempts — keeping previous data/states.json"
+          rm -f data/states.json.new
+          # No fallar el workflow: queremos que el archivo viejo se mantenga
+          exit 0
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet data/states.json 2>/dev/null; then
+            echo "no changes"
+            exit 0
+          fi
+          git add data/states.json
+          TS=$(python3 -c "import json; print(json.load(open('data/states.json'))['time'])")
+          N=$(python3 -c "import json; print(len(json.load(open('data/states.json'))['states']))")
+          git commit -m "data: refresh OpenSky snapshot ($N states @ $TS)"
+          git push

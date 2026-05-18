@@ -54,12 +54,29 @@ python3 -m http.server 8000
 2. En GitHub: **Settings → Pages → Source: Deploy from a branch → Branch: `main` / `(root)`**
 3. Esperar ~1 min. Live en `https://<usuario>.github.io/unimaurox-vuelos-internacionales/`.
 
-## Notas sobre OpenSky
+## Arquitectura de datos
 
-- Endpoint público sin auth: rate-limit ~10s entre requests, ventana de créditos diarios limitada. Por eso el dashboard refresca cada **30s** (no más rápido).
-- Devuelve ~10–15k vuelos activos globalmente. Por eso se usa **markercluster** — renderizar todos los markers sin agrupar mata al navegador.
-- CORS habilitado desde browser, no se necesita proxy.
-- Si quieres más frecuencia, regístrate gratis en https://opensky-network.org/ y reemplaza la URL en `js/app.js` por `https://<user>:<pass>@opensky-network.org/api/states/all`. **No commitees credenciales.**
+OpenSky **bloquea CORS desde browsers** — su header `Access-Control-Allow-Origin` solo permite `opensky-network.org`. Por eso un fetch directo desde GitHub Pages fallaría.
+
+**Solución:** un GitHub Action (`.github/workflows/fetch.yml`) corre cada 10 min en un runner de GitHub (donde no aplica CORS), descarga el JSON de OpenSky y lo commitea como `data/states.json`. La página front lee ese archivo estático con un cache-buster por minuto, así que siempre obtiene el snapshot más reciente.
+
+```
+[cron 10 min] → GH Actions runner → curl OpenSky → commit data/states.json
+                                                       ↓
+                                              [GH Pages rebuild]
+                                                       ↓
+                                          browser fetch ./data/states.json
+                                                       ↓
+                                                Leaflet + Chart.js
+```
+
+**Trade-off:** los datos no son "tiempo real" estricto — son snapshots cada ~10 min. Para tráfico aéreo global esto sigue siendo útil (las posiciones cambian a velocidad humanamente apreciable, no por segundo).
+
+**Notas:**
+- Devuelve ~6–15k vuelos activos globalmente. Por eso se usa **markercluster** — renderizar todos los markers sin agrupar mata al navegador.
+- El frontend refresca cada 30s para detectar nuevos snapshots committeados.
+- El status dot muestra la edad del snapshot: `live` = <20 min, `stale` = >20 min.
+- Si querés intervalos más cortos, bajá el cron a `*/5 * * * *` (mínimo en GitHub Actions) en `.github/workflows/fetch.yml`. OpenSky free tier permite 400 créditos/día, suficiente para 144 fetches/día (cada 10 min) o 288 (cada 5 min) si tu uso de créditos por request lo permite.
 
 ## Estado de conexión
 

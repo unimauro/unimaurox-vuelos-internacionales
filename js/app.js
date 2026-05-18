@@ -3,8 +3,13 @@
  * Vanilla JS + Leaflet + markercluster + Chart.js (todo via CDN, sin build).
  */
 
-const API_URL = "https://opensky-network.org/api/states/all";
+// OpenSky bloquea CORS desde browsers (ACAO solo permite su propio dominio).
+// Solucion: un GitHub Action (.github/workflows/fetch.yml) hace fetch cada 10 min
+// desde el runner (sin CORS) y commitea data/states.json. Aqui lo leemos como
+// archivo estatico con cache-buster por minuto.
+const API_URL = "./data/states.json";
 const REFRESH_MS = 30_000;
+const STALE_THRESHOLD_S = 20 * 60; // 20 min sin nuevo snapshot = "stale"
 
 // OpenSky states[] index layout
 const F = {
@@ -147,7 +152,9 @@ async function fetchAndRender(manual) {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 15_000);
-    const res = await fetch(API_URL, { signal: ctrl.signal, cache: "no-store" });
+    // cache-buster por minuto para que el CDN de GH Pages no sirva cache viejo
+    const url = `${API_URL}?t=${Math.floor(Date.now() / 60_000)}`;
+    const res = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
     clearTimeout(t);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
@@ -155,9 +162,16 @@ async function fetchAndRender(manual) {
 
     lastGoodData = json;
     render(json);
-    setStatus("live", "en vivo", json.time);
+
+    // Edad del snapshot (no del request) — el cron corre cada 10 min
+    const ageS = Math.max(0, Math.floor(Date.now() / 1000) - (json.time || 0));
+    if (ageS > STALE_THRESHOLD_S) {
+      setStatus("stale", `snapshot viejo (${fmtAge(ageS)})`, json.time);
+    } else {
+      setStatus("live", `snapshot ${fmtAge(ageS)}`, json.time);
+    }
   } catch (err) {
-    console.warn("[opensky] fetch error:", err);
+    console.warn("[fetch] error:", err);
     if (lastGoodData) {
       setStatus("stale", `sin red — último OK`, lastGoodData.time);
     } else {
@@ -321,6 +335,13 @@ function fmtInt(n) {
   return Math.round(n).toLocaleString("es-PE");
 }
 function cleanCallsign(c) { return (c || "").trim(); }
+function fmtAge(s) {
+  if (s < 60) return `hace ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.floor(m / 60);
+  return `hace ${h} h`;
+}
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, ch =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])
