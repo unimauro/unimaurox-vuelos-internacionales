@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Dashboard de vuelos internacionales en tiempo real — datos OpenSky Network, auto-refresh 30s." />
+  <title>unimaurox vuelos internacionales — live ATC</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◢◣</span>
+      <div>
+        <h1>unimaurox <span class="accent">/ vuelos internacionales</span></h1>
+        <p class="subtitle">Live air traffic — OpenSky Network</p>
+      </div>
+    </div>
+    <div class="status-cluster">
+      <div class="status-dot" id="status-dot" data-state="loading"></div>
+      <div class="status-text">
+        <span id="status-label">conectando…</span>
+        <span class="muted" id="status-time">—</span>
+      </div>
+      <button id="btn-refresh" class="btn-refresh" type="button" aria-label="Refrescar ahora">↻ refrescar</button>
+    </div>
+  </header>
+
+  <section class="kpi-strip" aria-label="Indicadores principales">
+    <article class="kpi">
+      <span class="kpi-label">vuelos activos</span>
+      <span class="kpi-value" id="kpi-total">—</span>
+      <span class="kpi-sub">en el aire ahora</span>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">países</span>
+      <span class="kpi-value" id="kpi-countries">—</span>
+      <span class="kpi-sub">con vuelos en curso</span>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">altitud promedio</span>
+      <span class="kpi-value" id="kpi-alt">—</span>
+      <span class="kpi-sub" id="kpi-alt-sub">— ft</span>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">velocidad promedio</span>
+      <span class="kpi-value" id="kpi-vel">—</span>
+      <span class="kpi-sub" id="kpi-vel-sub">— kt</span>
+    </article>
+    <article class="kpi highlight">
+      <span class="kpi-label">más alto</span>
+      <span class="kpi-value" id="kpi-max-alt">—</span>
+      <span class="kpi-sub" id="kpi-max-alt-sub">callsign —</span>
+    </article>
+    <article class="kpi highlight">
+      <span class="kpi-label">más rápido</span>
+      <span class="kpi-value" id="kpi-max-vel">—</span>
+      <span class="kpi-sub" id="kpi-max-vel-sub">callsign —</span>
+    </article>
+  </section>
+
+  <main class="dashboard">
+    <section class="card map-card">
+      <header class="card-head">
+        <h2>mapa global</h2>
+        <div class="legend">
+          <span><i class="dot dot-low"></i> &lt; 3 km</span>
+          <span><i class="dot dot-mid"></i> 3 – 9 km</span>
+          <span><i class="dot dot-high"></i> &gt; 9 km</span>
+        </div>
+      </header>
+      <div id="map" role="region" aria-label="Mapa mundial de vuelos"></div>
+    </section>
+
+    <section class="card chart-card">
+      <header class="card-head">
+        <h2>top 10 países</h2>
+        <span class="muted">por número de vuelos activos</span>
+      </header>
+      <div class="chart-wrap"><canvas id="chart-countries"></canvas></div>
+    </section>
+
+    <section class="card chart-card">
+      <header class="card-head">
+        <h2>distribución de altitudes</h2>
+        <span class="muted">bajo · medio · alto</span>
+      </header>
+      <div class="chart-wrap donut"><canvas id="chart-alt"></canvas></div>
+    </section>
+
+    <section class="card table-card">
+      <header class="card-head">
+        <h2>últimos 20 vuelos detectados</h2>
+        <span class="muted">orden por velocidad descendente</span>
+      </header>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>callsign</th>
+              <th>país</th>
+              <th class="num">altitud</th>
+              <th class="num">velocidad</th>
+              <th class="num">rumbo</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="5" class="muted center">cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>
+      datos: <a href="https://opensky-network.org/" target="_blank" rel="noopener">OpenSky Network</a> ·
+      auto-refresh 30s ·
+      hecho por <a href="https://github.com/unimauro" target="_blank" rel="noopener">@unimauro</a> ·
+      familia <code>unimaurox-*</code>
+    </p>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
